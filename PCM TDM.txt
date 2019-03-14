@@ -1,0 +1,185 @@
+                                                                     
+                                                                     
+                                                                     
+                                             
+clc;
+clear all;
+close all;
+
+fs=500;          % SAMPLING FREQUENCY
+t=(-1:1/fs:1);   
+analog1=50*sin(2*pi*5*t);   		% analog signals
+analog2=25*cos(2*pi*5*t);
+load lpf.mat				%LOW PASS FILTER TO REMOVE UNWANTED FREQUENCIES
+analog11=conv(lpf,analog1);
+analog22=conv(lpf,analog2);
+lanalog=length(analog1);			%length of analog signala
+lanalog11=length(analog11);
+% subplot(2,1,1)
+% plot(analog1)
+% hold
+% subplot(2,1,2)
+% plot(analog11)
+
+pulse=zeros(1,lanalog); %GENERATING A PULSE TRAIN
+for a=1:lanalog
+    if rem(a,5)==0		%divide by 5, if remainder is 0 then set element to 1
+    pulse(a)=1;
+    end
+end
+lengthpulse=length(pulse); 			%length of pulse train
+
+
+pam1=analog1.*pulse;    %SAMPLING: GENERATION OF PAM SIGNAL; element by element multipilication
+pam2=analog2.*pulse;
+
+
+pam1_max=max(pam1);     %QUANTIZATION
+pam1_min=min(pam1);
+L=16;                   %NUMBER OF QUANTIZATION LEVELS
+Delta=(pam1_max-pam1_min)/L;
+q_level1=pam1_min:Delta:pam1_max;     %QUANTIZATION LEVELS
+for a=1:lengthpulse 				%take the absolute of difference between every q-level and sample
+    dif1=pam1(a)-q_level1;
+    absdif1=abs(dif1);				%vector of differnces
+    [C,I] = min(absdif1);
+    quan_sig1(a)=q_level1(I);			% map it to q-level the min difference
+end
+
+
+pam2_max=max(pam2);
+pam2_min=min(pam2);
+L=16; 
+Delta=(pam2_max-pam2_min)/L;
+q_level2=pam2_min:Delta:pam2_max; 
+for a=1:lengthpulse
+    dif2=pam2(a)-q_level2;
+    absdif2=abs(dif2);
+    [C,I] = min(absdif2);
+    quan_sig2(a)=q_level2(I);
+end
+
+%ENCODING
+codebin1=dec2bin(typecast(int8(quan_sig1),'uint8'));		% convert dec to binary   
+codet1=codebin1';
+[m1,n1] = size(codet1);                                %MAKING A ROW VECTOR OF THE CODES
+codechar1=reshape(codet1,1,m1*n1);		%convert column matrix to row matrix
+lcode1=length(codechar1);
+for a=1:lcode1
+   code1(a)=str2num(codechar1(a));
+end
+
+
+codebin2=dec2bin(typecast(int8(quan_sig2),'uint8'));
+codet2=codebin2';
+[m2,n2] = size(codet2);
+codechar2=reshape(codet2,1,m2*n2);
+lcode2=length(codechar2);
+for a=1:lcode2
+   code2(a)=str2num(codechar2(a));
+end
+
+
+if lcode1>=lcode2
+    index=lcode1;
+else
+    index=lcode2;
+end
+
+
+tdm=zeros(2,index);                  % TIME DIVISION MULTIPEXING
+for a=1:index 
+    tdm(1,a)=code1(a);               % MAKING BOTH ROW VECTORS INTO ONE MATRIX
+    tdm(2,a)=code2(a); 
+end
+tdmsig=reshape(tdm,1,2*index);       % MAKING THE TDM SIGNAL into a single row matrix
+
+
+tdmdemux=reshape(tdmsig,2,index);    % DEMULTIPLEXING
+for i=1:index 
+demux1(i)=tdmdemux(1,i);             % CONVERTING THE MATRIX INTO 2 ROW VECTORS
+demux2(i)=tdmdemux(2,i);
+end
+
+% check=0;                          % CHECKING IF THE DEMULTIPLEXED
+                                    % SIGNALS IN THE RECEIVER MATCH THE ENCODED SIGNALS
+                                    % FROM THE TRANSMITTER
+%     if demux2==code2
+%         check=1;
+%     else
+%         check=0;
+%     end
+%        check
+
+
+ldemux1=length(demux1);             % DECODING 
+count=1;
+b=1;
+for a=1:ldemux1
+    temp1(count)=demux1(a);
+    if rem(count,8)==0
+        str1=num2str(temp1);
+        decode1(b)=typecast(uint8(bin2dec(str1)),'int8');
+        b=b+1;
+        count=1;  
+    else
+        count=count+1;
+    end
+end
+
+
+ldemux2=length(demux2);
+count=1;
+b=1;
+for a=1:ldemux2
+    temp2(count)=demux2(a);
+    if rem(count,8)==0
+        str2=num2str(temp2);
+        decode2(b)=typecast(uint8(bin2dec(str2)),'int8');
+        b=b+1;
+        count=1;  
+    else
+        count=count+1;
+    end
+end
+
+decode11=cast(decode1,'double');
+decode22=cast(decode2,'double');
+
+
+load reconstruction.mat                                       % RECONSTRUCTION
+y1=conv(reconstruction,decode11);
+y2=conv(reconstruction,decode22);
+
+
+ldecode1=length(decode11);                                    % FOURIER PLOTS AFTER RECONSTRUCTION
+fourierdecode1=abs(fftshift(fft(decode11))); 
+fdecode1=((-fs/2):(fs/ldecode1):(fs/2)-(fs/ldecode1));
+ly1=length(y1);
+fouriery1=abs(fftshift(fft(y1))); 
+fy1=((-fs/2):(fs/ly1):(fs/2)-(fs/ly1));
+y1=y1.*4;
+% subplot(2,1,1)
+% stem(fdecode1,fourierdecode1)
+% subplot(2,1,2)
+% stem(fy1,fouriery1)
+subplot(2,1,1)
+stem(analog1)
+subplot(2,1,2)
+stem(y1)
+
+ldecode2=length(decode22);
+fourierdecode2=abs(fftshift(fft(decode22))); 
+fdecode2=((-fs/2):(fs/ldecode2):(fs/2)-(fs/ldecode2));
+ly2=length(y1);
+fouriery2=abs(fftshift(fft(y1))); 
+fy2=((-fs/2):(fs/ly2):(fs/2)-(fs/ly2));
+y2=y2.*4;
+% subplot(2,1,1)
+% stem(fdecode2,fourierdecode2)
+% subplot(2,1,2)
+% stem(fy2,fouriery2)
+subplot(2,1,1)
+stem(analog2)
+subplot(2,1,2)
+stem(y2)
